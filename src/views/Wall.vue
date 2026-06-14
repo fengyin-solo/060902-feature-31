@@ -27,7 +27,7 @@
 
     <div v-else class="wall-container">
       <div class="wall-canvas" ref="wallCanvas">
-        <svg class="connection-lines" ref="svgRef">
+        <svg class="connection-lines" ref="svgRef" :width="svgWidth" :height="svgHeight" :viewBox="`0 0 ${svgWidth} ${svgHeight}`">
           <defs>
             <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" :style="{ stopColor: lineColor }" />
@@ -45,8 +45,8 @@
             </marker>
           </defs>
           
-          <g v-for="letter in displayedLetters" :key="'lines-' + letter.conversation.id">
-            <g v-for="rel in letter.relationships" :key="'rel-' + letter.conversation.id + '-' + rel.from + '-' + rel.to">
+          <g v-for="letter in displayedLetters" :key="'lines-' + letter.conversation.id + '-' + layoutVersion">
+            <g v-for="rel in letter.relationships" :key="'rel-' + letter.conversation.id + '-' + rel.from + '-' + rel.to + '-' + layoutVersion">
               <line
                 v-if="getMessagePosition(letter, rel.fromIndex) && getMessagePosition(letter, rel.toIndex)"
                 :x1="getMessagePosition(letter, rel.fromIndex).x"
@@ -209,7 +209,7 @@
   </div>
 </template>
 
-<script setup>import { ref, computed, onMounted, nextTick } from 'vue';
+<script setup>import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { store } from '@/store';
 const router = useRouter();
@@ -227,6 +227,10 @@ const hangUpOptions = ref({
  anonymous: true
 });
 const messageRefs = ref({});
+const layoutVersion = ref(0);
+const svgWidth = ref(0);
+const svgHeight = ref(0);
+let resizeTimer = null;
 const displayModes = [
  { value: 'all', label: '全部' },
  { value: 'love', label: '💖 情书模式' },
@@ -380,14 +384,48 @@ function getTagClass(tag) {
  return 'tag-freq';
  return 'tag';
 }
+function updateSvgSize() {
+ const container = wallCanvas.value;
+ if (!container)
+ return;
+ svgWidth.value = container.scrollWidth;
+ svgHeight.value = container.scrollHeight;
+}
+function refreshLayout() {
+ nextTick(() => {
+ updateSvgSize();
+ layoutVersion.value++;
+ });
+}
+function handleResize() {
+ if (resizeTimer)
+ clearTimeout(resizeTimer);
+ resizeTimer = setTimeout(() => {
+ refreshLayout();
+ }, 150);
+}
+watch(displayMode, () => {
+ refreshLayout();
+});
+watch(() => store.loveLetters, () => {
+ refreshLayout();
+}, { deep: true });
 onMounted(() => {
  nextTick(() => {
+ refreshLayout();
  const container = wallCanvas.value;
  if (container) {
  container.addEventListener('scroll', () => {
+ layoutVersion.value++;
  }, { passive: true });
  }
+ window.addEventListener('resize', handleResize);
  });
+});
+onUnmounted(() => {
+ if (resizeTimer)
+ clearTimeout(resizeTimer);
+ window.removeEventListener('resize', handleResize);
 });
 </script>
 
